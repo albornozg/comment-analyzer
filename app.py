@@ -1,8 +1,6 @@
 import streamlit as st
 import json
 import pandas as pd
-import re
-from collections import Counter
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import nltk
 import subprocess
@@ -20,66 +18,61 @@ st.write("Enter a YouTube video URL to analyze the sentiment of its comments.")
 url = st.text_input("YouTube Video URL", placeholder="https://www.youtube.com/watch?v=VIDEOID")
 
 # Function to run yt-dlp and fetch comments
-def fetch_comments(url, temp_dir):
-    try:
-        # Generate a temporary output file path
-        output_file = os.path.join(temp_dir, "video_info.json")
-        # Run yt-dlp command
-        cmd = [
-            "yt-dlp",
-            "--skip-download",
-            "--write-comments",
-            "--no-warnings",
-            "-o",
-            output_file,
-            url
-        ]
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
-        # Find the generated JSON file
-        for f in os.listdir(temp_dir):
-            if f.endswith(".info.json"):
-                return os.path.join(temp_dir, f)
-        return None
-    except subprocess.CalledProcessError as e:
-        st.error(f"Error fetching comments: {e.stderr}")
-        return None
+def fetch_comments(url, temp_dir, retries=3):
+    for attempt in range(retries):
+        try:
+            output_file = os.path.join(temp_dir, "video_info.json")
+            cmd = [
+                "yt-dlp",
+                "--skip-download",
+                "--write-comments",
+                "--no-warnings",
+                "--output",
+                output_file,
+                url
+            ]
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            for f in os.listdir(temp_dir):
+                if f.endswith(".info.json"):
+                    return os.path.join(temp_dir, f)
+            return None
+        except subprocess.CalledProcessError as e:
+            if attempt < retries - 1:
+                st.warning(f"Attempt {attempt + 1} failed. Retrying...")
+                continue
+            st.error(f"Error fetching comments: {e.stderr}")
+            return None
 
 # Function to analyze comments
 def analyze_comments(json_file):
     try:
-        # Load JSON
         with open(json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         
-        # Extract comments
         comments = [
             {"text": c.get("text", ""), "likes": c.get("like_count", 0)}
             for c in data.get("comments", [])
         ]
         if not comments:
-            return None, None, None
+            return None, None
         
         df = pd.DataFrame(comments)
-        
-        # Sentiment analysis
         sid = SentimentIntensityAnalyzer()
         df["sentiment"] = df["text"].apply(lambda t: sid.polarity_scores(t)["compound"])
         df["bucket"] = pd.cut(df["sentiment"], [-1, -0.05, 0.05, 1], labels=["neg", "neu", "pos"])
         
-        # Top words
-        stop = set("the and for you this that with have not are but was from your they just like what when why how she he him her has had were did out get got into over more very than then".split())
-        tokens = (w.lower() for t in df["text"] for w in re.findall(r"[a-zA-Z]{3,}", t))
-        top = Counter(w for w in tokens if w not in stop).most_common(25)
+        # Calculate sentiment distribution as percentages
+        sentiment_dist = df["bucket"].value_counts(normalize=True) * 100
+        sentiment_dist = sentiment_dist.round(2).to_dict()
         
-        return df, df["bucket"].value_counts(normalize=True).to_dict(), top
+        return df, sentiment_dist
     except Exception as e:
         st.error(f"Error analyzing comments: {str(e)}")
-        return None, None, None
+        return None, None
 
 # Process when URL is provided
 if url:
     with st.spinner("Fetching and analyzing comments..."):
-        # Use temporary directory
         with tempfile.TemporaryDirectory() as temp_dir:
             json_file = fetch_comments(url, temp_dir)
             if json_file:
@@ -93,14 +86,28 @@ if url:
                     )
                 
                 # Analyze comments
-                df, sentiment_dist, top_words = analyze_comments(json_file)
+                df, sentiment_dist = analyze_comments(json_file)
                 if df is not None:
                     st.subheader("Analysis Results")
                     st.write(f"**Total Comments**: {len(df)}")
-                    st.write("**Sentiment Distribution**:")
+                    st.write("**Sentiment Distribution (%):**")
                     st.json(sentiment_dist)
-                    st.write("**Top 25 Words**:")
-                    st.json(top_words)
+                    
+                    # Create pie chart
+                    if sentiment_dist:
+                        chart_data = pd.DataFrame(
+                            list(sentiment_dist.items()),
+                            columns=["Sentiment", "Percentage"]
+                        ).set_index("Sentiment")
+                        st.subheader("Sentiment Distribution Pie Chart")
+                        st.pyplot(
+                            chart_data.plot.pie(
+                                y="Percentage",
+                                labels=chart_data.index,
+                                autopct="%1.1f%%",
+                                figsize=(6, 6)
+                            ).get_figure()
+                        )
                 else:
                     st.warning("No comments found or analysis failed.")
             else:
