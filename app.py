@@ -62,7 +62,7 @@ def analyze_comments(json_file):
         df = pd.DataFrame(comments)
         sid = SentimentIntensityAnalyzer()
         df["sentiment"] = df["text"].apply(lambda t: sid.polarity_scores(t)["compound"])
-        df["bucket"] = pd.cut(df["sentiment"], [-1, -0.05, 0.05, 1], labels=["neg", "neu", "pos"])
+        df["bucket"] = pd.cut(df["sentiment"], [-1, -0.05, 0.05, 1], labels=["Negative", "Neutral", "Positive"])
         
         # Calculate sentiment distribution as percentages
         sentiment_dist = df["bucket"].value_counts(normalize=True) * 100
@@ -104,7 +104,7 @@ if url:
                         ).set_index("Sentiment")
                         
                         # Reorder index to ensure neg, neu, pos order for correct color mapping
-                        chart_data = chart_data.reindex(["neg", "neu", "pos"])
+                        chart_data = chart_data.reindex(["Negative", "Neutral", "Positive"])
                         
                         st.subheader("Sentiment Distribution Pie Chart")
                         st.pyplot(
@@ -120,3 +120,4 @@ if url:
                     st.warning("No comments found or analysis failed.")
             else:
                 st.error("Failed to fetch comments. Please check the URL or try again.")
+
