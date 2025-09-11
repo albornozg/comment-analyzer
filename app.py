@@ -6,6 +6,9 @@ import nltk
 import subprocess
 import os
 import tempfile
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 # Download NLTK data
 nltk.download('vader_lexicon', quiet=True)
@@ -59,7 +62,7 @@ def analyze_comments(json_file):
         df = pd.DataFrame(comments)
         sid = SentimentIntensityAnalyzer()
         df["sentiment"] = df["text"].apply(lambda t: sid.polarity_scores(t)["compound"])
-        df["bucket"] = pd.cut(df["sentiment"], [-1, -0.05, 0.05, 1], labels=["Negative", "Neutral", "Positive"])
+        df["bucket"] = pd.cut(df["sentiment"], [-1, -0.05, 0.05, 1], labels=["neg", "neu", "pos"])
         
         # Calculate sentiment distribution as percentages
         sentiment_dist = df["bucket"].value_counts(normalize=True) * 100
@@ -93,7 +96,7 @@ if url:
                     st.write("**Sentiment Distribution (%):**")
                     st.json(sentiment_dist)
                     
-                    # Create pie chart
+                    # Create pie chart with custom colors: red for neg, blue for neu, green for pos
                     if sentiment_dist:
                         chart_data = pd.DataFrame(
                             list(sentiment_dist.items()),
@@ -105,6 +108,7 @@ if url:
                                 y="Percentage",
                                 labels=chart_data.index,
                                 autopct="%1.1f%%",
+                                colors=["#ff9999", "#66b3ff", "#99ff99"],  # Red for neg, blue for neu, green for pos
                                 figsize=(6, 6)
                             ).get_figure()
                         )
