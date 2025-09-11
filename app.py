@@ -102,6 +102,10 @@ if url:
                             list(sentiment_dist.items()),
                             columns=["Sentiment", "Percentage"]
                         ).set_index("Sentiment")
+                        
+                        # Reorder index to ensure neg, neu, pos order for correct color mapping
+                        chart_data = chart_data.reindex(["neg", "neu", "pos"])
+                        
                         st.subheader("Sentiment Distribution Pie Chart")
                         st.pyplot(
                             chart_data.plot.pie(
